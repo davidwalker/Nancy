@@ -23,7 +23,7 @@
             this.rootPathProvider = A.Fake<IRootPathProvider>();
             A.CallTo(() => this.rootPathProvider.GetRootPath()).Returns(Path.Combine(Environment.CurrentDirectory, "TestViews"));
 						
-            this.fileSystemViewLocationProvider = new FileSystemViewLocationProvider(this.rootPathProvider);
+            this.fileSystemViewLocationProvider = new FileSystemViewLocationProvider(this.rootPathProvider, new DefaultFileSystemReader());
             
             this.renderContext = A.Fake<IRenderContext>();
 
@@ -62,6 +62,16 @@
                 .ShouldEqual("<div>&lt;div&gt;&amp;lt;&amp;gt;&lt;/div&gt;</div>");
         }
 
+        [Fact]
+        public void Should_be_able_to_html_encode_null_using_H_function_from_views()
+        {
+            //Given, When
+            this.FindViewAndRender("ViewThatUsesNullHtmlEncoding");
+
+            //Then
+            this.output.ShouldEqual("<div></div>");
+        }
+
         [Fact] 
         public void Should_be_able_to_provide_global_setting_for_views()
         {
@@ -96,6 +106,16 @@
 
             //Then
             this.output.ShouldEqual("<div>index</div>");
+        }
+
+        [Fact]
+        public void Should_be_able_to_render_a_subfolder_view()
+        {
+            var viewLocationResult = new ViewLocationResult("Stub\\Subfolder", "Subfolderview", "spark", GetEmptyContentReader());
+            this.FindViewAndRender<dynamic>("subfolder\\Subfolderview", null, viewLocationResult);
+
+            //Then
+            this.output.ShouldEqual("<div>Subfolder</div>");
         }
 
         [Fact]
@@ -254,21 +274,26 @@
             this.output.ShouldContain(@"<script type=""text/javascript"" src=""/mysensationalrootfolder/scripts/test.js""/>");
         }
 
-        private void FindViewAndRender<T>(string viewName, T viewModel) where T : class
+        private void FindViewAndRender<T>(string viewName, T viewModel, ViewLocationResult viewLocationResult = null) where T : class
         {
-            var viewLocationResult = new ViewLocationResult("Stub", viewName, "spark", GetEmptyContentReader());
+            if (viewLocationResult == null)
+            {
+                viewLocationResult = new ViewLocationResult("Stub", viewName, "spark", GetEmptyContentReader());
+            }
+
             var stream = new MemoryStream();
             var engine = new SparkViewEngine();
 
             var context = new ViewEngineStartupContext(
                 A.Fake<IViewCache>(),
-                this.fileSystemViewLocationProvider.GetLocatedViews(new[] {"spark"}));
+                this.fileSystemViewLocationProvider.GetLocatedViews(new[] {"spark"}),
+                new[] {"spark"});
 
             engine.Initialize(context);
 
             //When
-            var action = engine.RenderView(viewLocationResult, viewModel, this.renderContext);
-            action.Invoke(stream);
+            var response = engine.RenderView(viewLocationResult, viewModel, this.renderContext);
+            response.Contents.Invoke(stream);
             stream.Position = 0;
             using (var reader = new StreamReader(stream))
             {

@@ -1,7 +1,10 @@
 namespace Nancy.Tests.Unit
 {
+    using System;
     using System.IO;
+    using System.Text;
     using FakeItEasy;
+    using Nancy.Responses;
     using Nancy.Tests.Fakes;
     using Xunit;
 
@@ -14,6 +17,7 @@ namespace Nancy.Tests.Unit
         public JsonFormatterExtensionsFixtures()
         {
             this.formatter = A.Fake<IResponseFormatter>();
+            A.CallTo(() => this.formatter.Serializers).Returns(new[] { new DefaultJsonSerializer() });
             this.model = new Person { FirstName = "Andy", LastName = "Pike" };
             this.response = this.formatter.AsJson(model);
         }
@@ -36,7 +40,8 @@ namespace Nancy.Tests.Unit
             using (var stream = new MemoryStream())
             {
                 response.Contents(stream);
-                stream.ShouldEqual("{\"FirstName\":\"Andy\",\"LastName\":\"Pike\"}");
+
+                Encoding.UTF8.GetString(stream.ToArray()).ShouldEqual("{\"FirstName\":\"Andy\",\"LastName\":\"Pike\"}");
             }
         }
 
@@ -47,7 +52,7 @@ namespace Nancy.Tests.Unit
             using (var stream = new MemoryStream())
             {
                 nullResponse.Contents(stream);
-                stream.ShouldEqual("null");
+                Encoding.UTF8.GetString(stream.ToArray()).ShouldEqual("null");
             }
         }
     }

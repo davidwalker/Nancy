@@ -4,6 +4,7 @@ namespace Nancy.Hosting.Aspnet
     using System.Globalization;
     using System.Linq;
     using System.Web;
+    using Bootstrapper;
     using IO;
     using Nancy.Extensions;
 
@@ -34,7 +35,7 @@ namespace Nancy.Hosting.Aspnet
             var nancyUrl = new Url
                                {
                                    Scheme = context.Request.Url.Scheme,
-                                   HostName = context.Request.UserHostName,
+                                   HostName = context.Request.Url.Host,
                                    Port = context.Request.Url.Port,
                                    BasePath = context.Request.ApplicationPath.TrimEnd('/'),
                                    Path = context.Request.AppRelativeCurrentExecutionFilePath.Replace("~", string.Empty),
@@ -46,7 +47,8 @@ namespace Nancy.Hosting.Aspnet
                 context.Request.HttpMethod.ToUpperInvariant(),
                 nancyUrl,
                 RequestStream.FromStream(context.Request.InputStream, expectedRequestLength, true),
-                context.Request.Headers.ToDictionary());
+                context.Request.Headers.ToDictionary(),
+                context.Request.UserHostAddress);
         }
 
         private static long GetExpectedRequestLength(IDictionary<string, IEnumerable<string>> incomingHeaders)

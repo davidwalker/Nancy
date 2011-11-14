@@ -44,13 +44,13 @@ namespace Nancy.Authentication.Forms
         /// <summary>
         /// Enables forms authentication for the application
         /// </summary>
-        /// <param name="applicationPipelines">Pipelines to add handlers to (usually "this")</param>
+        /// <param name="pipelines">Pipelines to add handlers to (usually "this")</param>
         /// <param name="configuration">Forms authentication configuration</param>
-        public static void Enable(IApplicationPipelines applicationPipelines, FormsAuthenticationConfiguration configuration)
+        public static void Enable(IPipelines pipelines, FormsAuthenticationConfiguration configuration)
         {
-            if (applicationPipelines == null)
+            if (pipelines == null)
             {
-                throw new ArgumentNullException("applicationPipelines");
+                throw new ArgumentNullException("pipelines");
             }
 
             if (configuration == null)
@@ -65,8 +65,8 @@ namespace Nancy.Authentication.Forms
 
             currentConfiguration = configuration;
 
-            applicationPipelines.BeforeRequest.AddItemToStartOfPipeline(GetLoadAuthenticationHook(configuration));
-            applicationPipelines.AfterRequest.AddItemToEndOfPipeline(GetRedirectToLoginHook(configuration));
+            pipelines.BeforeRequest.AddItemToStartOfPipeline(GetLoadAuthenticationHook(configuration));
+            pipelines.AfterRequest.AddItemToEndOfPipeline(GetRedirectToLoginHook(configuration));
         }
 
         /// <summary>
@@ -77,7 +77,7 @@ namespace Nancy.Authentication.Forms
         /// <param name="userIdentifier">User identifier guid</param>
         /// <param name="cookieExpiry">Optional expiry date for the cookie (for 'Remember me')</param>
         /// <param name="fallbackRedirectUrl">Url to redirect to if none in the querystring</param>
-        /// <returns>Nancy response</returns>
+        /// <returns>Nancy response with redirect.</returns>
         public static Response UserLoggedInRedirectResponse(NancyContext context, Guid userIdentifier, DateTime? cookieExpiry = null, string fallbackRedirectUrl = "/")
         {
             var redirectUrl = fallbackRedirectUrl;
@@ -95,6 +95,25 @@ namespace Nancy.Authentication.Forms
         }
 
         /// <summary>
+        /// Logs the user in.
+        /// </summary>
+        /// <param name="userIdentifier">User identifier guid</param>
+        /// <param name="cookieExpiry">Optional expiry date for the cookie (for 'Remember me')</param>
+        /// <returns>Nancy response with status <see cref="HttpStatusCode.OK"/></returns>
+        public static Response UserLoggedInResponse(Guid userIdentifier, DateTime? cookieExpiry = null)
+        {
+            var response =
+                (Response)HttpStatusCode.OK;
+
+            var authenticationCookie = 
+                BuildCookie(userIdentifier, cookieExpiry, currentConfiguration);
+
+            response.AddCookie(authenticationCookie);
+
+            return response;
+        }
+
+        /// <summary>
         /// Logs the user out and redirects them to a URL
         /// </summary>
         /// <param name="context">Current context</param>
@@ -104,6 +123,23 @@ namespace Nancy.Authentication.Forms
         {
             var response = context.GetRedirect(redirectUrl);
             var authenticationCookie = BuildLogoutCookie(currentConfiguration);
+            response.AddCookie(authenticationCookie);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Logs the user out.
+        /// </summary>
+        /// <returns>Nancy response</returns>
+        public static Response LogOutResponse()
+        {
+            var response =
+                (Response)HttpStatusCode.OK;
+
+            var authenticationCookie = 
+                BuildLogoutCookie(currentConfiguration);
+
             response.AddCookie(authenticationCookie);
 
             return response;

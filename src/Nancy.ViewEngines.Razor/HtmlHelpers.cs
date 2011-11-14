@@ -6,7 +6,7 @@
 
     public class HtmlHelpers
     {
-        public readonly IViewEngine engine;
+        public readonly RazorViewEngine engine;
         public readonly IRenderContext renderContext;
 
         /// <summary>
@@ -14,7 +14,7 @@
         /// </summary>
         /// <param name="engine"></param>
         /// <param name="renderContext"></param>
-        public HtmlHelpers(IViewEngine engine, IRenderContext renderContext)
+        public HtmlHelpers(RazorViewEngine engine, IRenderContext renderContext)
         {
             this.engine = engine;
             this.renderContext = renderContext;
@@ -29,7 +29,8 @@
         {
             ViewLocationResult view = this.renderContext.LocateView(viewName, model);
 
-            Action<Stream> action = this.engine.RenderView(view, model, this.renderContext);
+            Response response = this.engine.RenderView(view, model, this.renderContext);
+            Action<Stream> action = response.Contents;
             var mem = new MemoryStream();
 
             action.Invoke(mem);
@@ -38,6 +39,18 @@
             var reader = new StreamReader(mem);
 
             return new NonEncodedHtmlString(reader.ReadToEnd());
+        }
+
+        public IHtmlString Raw(string text)
+        {
+            return new NonEncodedHtmlString(text);
+        }
+
+        public IHtmlString AntiForgeryToken()
+        {
+            var tokenKeyValue = this.renderContext.GetCsrfToken();
+
+            return new NonEncodedHtmlString(String.Format("<input type=\"hidden\" name=\"{0}\" value=\"{1}\"/>", tokenKeyValue.Key, tokenKeyValue.Value));
         }
     }
 }

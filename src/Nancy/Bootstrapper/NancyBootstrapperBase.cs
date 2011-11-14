@@ -3,21 +3,18 @@
     using System;
     using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
-    using System.IO;
     using System.Linq;
-
-    using ModelBinding;
-
+    using Nancy.Cryptography;
+    using Nancy.ModelBinding;
     using Nancy.Conventions;
-
-    using ViewEngines;
+    using Nancy.ViewEngines;
 
     /// <summary>
     /// Nancy bootstrapper base class
     /// </summary>
     /// <typeparam name="TContainer">IoC container type</typeparam>
     [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1623:PropertySummaryDocumentationMustMatchAccessors", Justification = "Abstract base class - properties are described differently for overriding.")]
-    public abstract class NancyBootstrapperBase<TContainer> : INancyBootstrapper, IApplicationPipelines, INancyModuleCatalog
+    public abstract class NancyBootstrapperBase<TContainer> : INancyBootstrapper, INancyModuleCatalog
         where TContainer : class
     {
         /// <summary>
@@ -29,7 +26,14 @@
         /// <summary>
         /// Default Nancy conventions
         /// </summary>
-        private NancyConventions conventions;
+        private readonly NancyConventions conventions;
+
+        /// <summary>
+        /// Application pipelines.
+        /// Pipelines are "cloned" per request so they can be modified
+        /// at the request level.
+        /// </summary>
+        protected IPipelines ApplicationPipelines { get; private set; }
 
         /// <summary>
         /// Nancy modules - built on startup from the app domain scanner
@@ -48,34 +52,9 @@
         {
             AppDomainAssemblyTypeScanner.LoadNancyAssemblies();
 
-            this.BeforeRequest = new BeforePipeline();
-            this.AfterRequest = new AfterPipeline();
-
+            this.ApplicationPipelines = new Pipelines();
             this.conventions = new NancyConventions();
         }
-
-        /// <summary>
-        /// <para>
-        /// The pre-request hook
-        /// </para>
-        /// <para>
-        /// The PreRequest hook is called prior to processing a request. If a hook returns
-        /// a non-null response then processing is aborted and the response provided is
-        /// returned.
-        /// </para>
-        /// </summary>
-        public BeforePipeline BeforeRequest { get; set; }
-
-        /// <summary>
-        /// <para>
-        /// The post-request hook
-        /// </para>
-        /// <para>
-        /// The post-request hook is called after the response is created. It can be used
-        /// to rewrite the response or add/remove items from the context.
-        /// </para>
-        /// </summary>
-        public AfterPipeline AfterRequest { get; set; }
 
         /// <summary>
         /// Gets the Container instance - automatically set during initialise.
@@ -160,10 +139,7 @@
         /// </summary>
         protected virtual IEnumerable<Type> BodyDeserializers
         {
-            get
-            {
-                return AppDomainAssemblyTypeScanner.TypesOf<IBodyDeserializer>(true);
-            }
+            get { return AppDomainAssemblyTypeScanner.TypesOf<IBodyDeserializer>(true); }
         }
 
         /// <summary>
@@ -171,10 +147,7 @@
         /// </summary>
         protected virtual IEnumerable<Type> StartupTasks
         {
-            get
-            {
-                return AppDomainAssemblyTypeScanner.TypesOf<IStartup>();
-            }
+            get { return AppDomainAssemblyTypeScanner.TypesOf<IStartup>(); }
         }
 
         /// <summary>
@@ -182,11 +155,7 @@
         /// </summary>
         protected virtual Type RootPathProvider
         {
-            get
-            {
-                return AppDomainAssemblyTypeScanner.TypesOf<IRootPathProvider>(true)
-                        .FirstOrDefault() ?? typeof(DefaultRootPathProvider);
-            }
+            get { return AppDomainAssemblyTypeScanner.TypesOf<IRootPathProvider>(true).FirstOrDefault() ?? typeof(DefaultRootPathProvider); }
         }
 
         /// <summary>
@@ -194,10 +163,15 @@
         /// </summary>
         protected virtual byte[] DefaultFavIcon
         {
-            get
-            {
-                return this.defaultFavIcon ?? (this.defaultFavIcon = this.LoadFavIcon());
-            }
+            get { return this.defaultFavIcon ?? (this.defaultFavIcon = LoadFavIcon()); }
+        }
+
+        /// <summary>
+        /// Gets the cryptography configuration
+        /// </summary>
+        protected CryptographyConfiguration CryptographyConfiguration
+        {
+            get { return CryptographyConfiguration.Default; }
         }
 
         /// <summary>
@@ -223,6 +197,9 @@
             var typeRegistrations = this.InternalConfiguration.GetTypeRegistations()
                                         .Concat(this.GetAdditionalTypes());
 
+            var collectionTypeRegistrations = this.InternalConfiguration.GetCollectionTypeRegistrations()
+                                                  .Concat(this.GetApplicationCollections());
+
             // TODO - should this be after initialiseinternal?
             this.ConfigureConventions(this.Conventions);
             var conventionValidationResult = this.Conventions.Validate();
@@ -231,21 +208,39 @@
                 throw new InvalidOperationException(string.Format("Conventions are invalid:\n\n{0}", conventionValidationResult.Item2));
             }
 
+            var instanceRegistrations = this.Conventions.GetInstanceRegistrations()
+                                            .Concat(this.GetAdditionalInstances());
+
             this.RegisterTypes(this.ApplicationContainer, typeRegistrations);
-            this.RegisterCollectionTypes(this.ApplicationContainer, this.GetApplicationCollections());
+            this.RegisterCollectionTypes(this.ApplicationContainer, collectionTypeRegistrations);
             this.RegisterModules(this.ApplicationContainer, this.Modules);
-            this.RegisterInstances(this.ApplicationContainer, this.Conventions.GetInstanceRegistrations());
-            
-            this.InitialiseInternal(this.ApplicationContainer);
+            this.RegisterInstances(this.ApplicationContainer, instanceRegistrations);
 
             foreach (var startupTask in this.GetStartupTasks())
             {
-                startupTask.Initialize();
+                startupTask.Initialize(this.ApplicationPipelines);
+
+                if (startupTask.TypeRegistrations != null)
+                {
+                    this.RegisterTypes(this.ApplicationContainer, startupTask.TypeRegistrations);
+                }
+
+                if (startupTask.CollectionTypeRegistrations != null)
+                {
+                    this.RegisterCollectionTypes(this.ApplicationContainer, startupTask.CollectionTypeRegistrations);
+                }
+
+                if (startupTask.InstanceRegistrations != null)
+                {
+                    this.RegisterInstances(this.ApplicationContainer, startupTask.InstanceRegistrations);
+                }
             }
+
+            this.ApplicationStartup(this.ApplicationContainer, this.ApplicationPipelines);
 
             if (this.DefaultFavIcon != null)
             {
-                this.BeforeRequest.AddItemToStartOfPipeline(ctx =>
+                this.ApplicationPipelines.BeforeRequest.AddItemToStartOfPipeline(ctx =>
                     {
                         if (ctx.Request == null || String.IsNullOrEmpty(ctx.Request.Path))
                         {
@@ -306,8 +301,8 @@
             }
 
             var engine = this.GetEngineInternal();
-            engine.PreRequestHook = this.BeforeRequest;
-            engine.PostRequestHook = this.AfterRequest;
+
+            engine.RequestPipelinesFactory = this.InitializeRequestPipelines;
 
             return engine;
         }
@@ -332,6 +327,21 @@
         }
 
         /// <summary>
+        /// Creates and initializes the request pipelines.
+        /// </summary>
+        /// <param name="context">The <see cref="NancyContext"/> used by the request.</param>
+        /// <returns>An <see cref="IPipelines"/> instance.</returns>
+        protected virtual IPipelines InitializeRequestPipelines(NancyContext context)
+        {
+            var requestPipelines =
+                new Pipelines(this.ApplicationPipelines);
+
+            this.RequestStartup(this.ApplicationContainer, requestPipelines, context);
+
+            return requestPipelines;
+        }
+
+        /// <summary>
         /// Hides ToString from the overrides list
         /// </summary>
         /// <returns>String representation</returns>
@@ -346,7 +356,19 @@
         /// related
         /// </summary>
         /// <param name="container">Container instance for resolving types if required.</param>
-        protected virtual void InitialiseInternal(TContainer container)
+        protected virtual void ApplicationStartup(TContainer container, IPipelines pipelines)
+        {
+        }
+
+        /// <summary>
+        /// Initialise the request - can be used for adding pre/post hooks and
+        /// any other per-request initialisation tasks that aren't specifically container setup
+        /// related
+        /// </summary>
+        /// <param name="container">Container</param>
+        /// <param name="pipelines">Current pipelines</param>
+        /// <param name="context">Current context</param>
+        protected virtual void RequestStartup(TContainer container, IPipelines pipelines, NancyContext context)
         {
         }
 
@@ -428,10 +450,17 @@
         /// <returns>Collection of TypeRegistration types</returns>
         private IEnumerable<TypeRegistration> GetAdditionalTypes()
         {
-            return new[]
-                {
-                    new TypeRegistration(typeof(IRootPathProvider), this.RootPathProvider),   
-                };
+            return new[] { new TypeRegistration(typeof(IRootPathProvider), this.RootPathProvider) };
+        }
+
+        /// <summary>
+        /// Gets any additional instance registrations that need to
+        /// be registered into the container
+        /// </summary>
+        /// <returns>Collection of InstanceRegistation types</returns>
+        private IEnumerable<InstanceRegistration> GetAdditionalInstances()
+        {
+            return new[] { new InstanceRegistration(typeof(CryptographyConfiguration), this.CryptographyConfiguration) };
         }
 
         /// <summary>
@@ -456,15 +485,19 @@
         /// Loads the default favicon from the assembly
         /// </summary>
         /// <returns>Favicon byte array</returns>
-        private byte[] LoadFavIcon()
+        private static byte[] LoadFavIcon()
         {
-            var resourceStream = typeof(INancyEngine).Assembly.GetManifestResourceStream("Nancy.favicon.ico");
+            var resourceStream = 
+                typeof(INancyEngine).Assembly.GetManifestResourceStream("Nancy.favicon.ico");
+
             if (resourceStream == null)
             {
                 return null;
             }
 
-            var result = new byte[resourceStream.Length];
+            var result = 
+                new byte[resourceStream.Length];
+
             resourceStream.Read(result, 0, (int)resourceStream.Length);
 
             return result;

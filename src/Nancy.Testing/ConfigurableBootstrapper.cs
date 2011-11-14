@@ -9,6 +9,7 @@ namespace Nancy.Testing
     using Nancy.ErrorHandling;
     using Nancy.ModelBinding;
     using Nancy.Routing;
+    using Nancy.Security;
     using Nancy.ViewEngines;
 
     using TinyIoC;
@@ -16,7 +17,7 @@ namespace Nancy.Testing
     /// <summary>
     /// A Nancy boostrapper that can be configured with either Type or Instance overrides for all Nancy types.
     /// </summary>
-    public class ConfigurableBootstrapper : NancyBootstrapperWithRequestContainerBase<TinyIoCContainer>
+    public class ConfigurableBootstrapper : NancyBootstrapperWithRequestContainerBase<TinyIoCContainer>, IPipelines
     {
         private readonly List<object> registeredTypes;
         private readonly List<InstanceRegistration> registeredInstances;
@@ -340,6 +341,53 @@ namespace Nancy.Testing
             }
         }
 
+
+        /// <summary>
+        /// <para>
+        /// The pre-request hook
+        /// </para>
+        /// <para>
+        /// The PreRequest hook is called prior to processing a request. If a hook returns
+        /// a non-null response then processing is aborted and the response provided is
+        /// returned.
+        /// </para>
+        /// </summary>
+        public BeforePipeline BeforeRequest
+        {
+            get { return this.ApplicationPipelines.BeforeRequest; }
+            set { this.ApplicationPipelines.BeforeRequest = value; }
+        }
+
+        /// <summary>
+        /// <para>
+        /// The post-request hook
+        /// </para>
+        /// <para>
+        /// The post-request hook is called after the response is created. It can be used
+        /// to rewrite the response or add/remove items from the context.
+        /// </para>
+        /// </summary>
+        public AfterPipeline AfterRequest
+        {
+            get { return this.ApplicationPipelines.AfterRequest; }
+            set { this.ApplicationPipelines.AfterRequest = value; }
+        }
+
+        /// <summary>
+        /// <para>
+        /// The error hook
+        /// </para>
+        /// <para>
+        /// The error hook is called if an exception is thrown at any time during the pipeline.
+        /// If no error hook exists a standard InternalServerError response is returned
+        /// </para>
+        /// </summary>
+        public ErrorPipeline OnError
+        {
+            get { return this.ApplicationPipelines.OnError; }
+            set { this.ApplicationPipelines.OnError = value; }
+        }
+
         /// <summary>
         /// Provides an API for configuring a <see cref="ConfigurableBootstrapper"/> instance.
         /// </summary>
@@ -456,12 +504,11 @@ namespace Nancy.Testing
             /// <summary>
             /// Configures the bootstrapper to use the provided instance of <see cref="IErrorHandler"/>.
             /// </summary>
-            /// <param name="errorHandler">The <see cref="IErrorHandler"/> instance that should be used by the bootstrapper.</param>
+            /// <param name="errorHandlers">The <see cref="IErrorHandler"/> types that should be used by the bootstrapper.</param>
             /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
-            public ConfigurableBoostrapperConfigurator ErrorHandler(IErrorHandler errorHandler)
+            public ConfigurableBoostrapperConfigurator ErrorHandlers(params Type[] errorHandlers)
             {
-                this.bootstrapper.registeredInstances.Add(
-                    new InstanceRegistration(typeof(IErrorHandler), errorHandler));
+                this.bootstrapper.configuration.ErrorHandlers = new List<Type>(errorHandlers);
 
                 return this;
             }
@@ -473,7 +520,7 @@ namespace Nancy.Testing
             /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
             public ConfigurableBoostrapperConfigurator ErrorHandler<T>() where T : IErrorHandler
             {
-                this.bootstrapper.configuration.ErrorHandler = typeof(T);
+                this.bootstrapper.configuration.ErrorHandlers = new List<Type>( new[] { typeof(T) } );
                 return this;
             }
 
@@ -626,26 +673,26 @@ namespace Nancy.Testing
             }
 
             /// <summary>
-            /// Configures the bootstrapper to use the provided instance of <see cref="IResponseFormatter"/>.
+            /// Configures the bootstrapper to use the provided instance of <see cref="IResponseFormatterFactory"/>.
             /// </summary>
-            /// <param name="responseFormatter">The <see cref="IResponseFormatter"/> instance that should be used by the bootstrapper.</param>
+            /// <param name="responseFormatterFactory">The <see cref="IResponseFormatterFactory"/> instance that should be used by the bootstrapper.</param>
             /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
-            public ConfigurableBoostrapperConfigurator ResponseFormatter(IResponseFormatter responseFormatter)
+            public ConfigurableBoostrapperConfigurator ResponseFormatterFactory(IResponseFormatterFactory responseFormatterFactory)
             {
                 this.bootstrapper.registeredInstances.Add(
-                    new InstanceRegistration(typeof(IResponseFormatter), responseFormatter));
+                    new InstanceRegistration(typeof(IResponseFormatterFactory), responseFormatterFactory));
 
                 return this;
             }
 
             /// <summary>
-            /// Configures the bootstrapper to create an <see cref="IResponseFormatter"/> instance of the specified type.
+            /// Configures the bootstrapper to create an <see cref="IResponseFormatterFactory"/> instance of the specified type.
             /// </summary>
-            /// <typeparam name="T">The type of the <see cref="IResponseFormatter"/> that the bootstrapper should use.</typeparam>
+            /// <typeparam name="T">The type of the <see cref="IResponseFormatterFactory"/> that the bootstrapper should use.</typeparam>
             /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
-            public ConfigurableBoostrapperConfigurator ResponseFormatter<T>() where T : IResponseFormatter
+            public ConfigurableBoostrapperConfigurator ResponseFormatterFactory<T>() where T : IResponseFormatterFactory
             {
-                this.bootstrapper.configuration.ResponseFormatter = typeof(T);
+                this.bootstrapper.configuration.ResponseFormatterFactory = typeof(T);
                 return this;
             }
 
@@ -951,6 +998,77 @@ namespace Nancy.Testing
             public ConfigurableBoostrapperConfigurator ViewResolver<T>() where T : IViewResolver
             {
                 this.bootstrapper.configuration.ViewResolver = typeof(T);
+                return this;
+            }
+
+            /// <summary>
+            /// Configures the bootstrapper to use the provided instance of <see cref="ICsrfTokenValidator"/>.
+            /// </summary>
+            /// <param name="tokenValidator">The <see cref="ICsrfTokenValidator"/> instance that should be used by the bootstrapper.</param>
+            /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
+            public ConfigurableBoostrapperConfigurator CsrfTokenValidator(ICsrfTokenValidator tokenValidator)
+            {
+                this.bootstrapper.registeredInstances.Add(
+                    new InstanceRegistration(typeof(ICsrfTokenValidator), tokenValidator));
+
+                return this;
+            }
+
+            /// <summary>
+            /// Configures the bootstrapper to create an <see cref="ICsrfTokenValidator"/> instance of the specified type.
+            /// </summary>
+            /// <typeparam name="T">The type of the <see cref="ICsrfTokenValidator"/> that the bootstrapper should use.</typeparam>
+            /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
+            public ConfigurableBoostrapperConfigurator CsrfTokenValidator<T>() where T : ICsrfTokenValidator
+            {
+                this.bootstrapper.configuration.CsrfTokenValidator = typeof(T);
+                return this;
+            }
+
+            /// <summary>
+            /// Configures the bootstrapper to use the provided instance of <see cref="IObjectSerializer"/>.
+            /// </summary>
+            /// <param name="objectSerializer">The <see cref="IObjectSerializer"/> instance that should be used by the bootstrapper.</param>
+            /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
+            public ConfigurableBoostrapperConfigurator ObjectSerializer(IObjectSerializer objectSerializer)
+            {
+                this.bootstrapper.registeredInstances.Add(
+                    new InstanceRegistration(typeof(IObjectSerializer), objectSerializer));
+
+                return this;
+            }
+
+            /// <summary>
+            /// Configures the bootstrapper to create an <see cref="IObjectSerializer"/> instance of the specified type.
+            /// </summary>
+            /// <typeparam name="T">The type of the <see cref="IObjectSerializer"/> that the bootstrapper should use.</typeparam>
+            /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
+            public ConfigurableBoostrapperConfigurator ObjectSerializer<T>() where T : IObjectSerializer
+            {
+                this.bootstrapper.configuration.ObjectSerializer = typeof(T);
+                return this;
+            }
+
+
+            /// <summary>
+            /// Configures the bootstrapper to use a specific serializer
+            /// </summary>
+            /// <typeparam name="T">Serializer type</typeparam>
+            /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
+            public ConfigurableBoostrapperConfigurator Serializer<T>() where T : ISerializer
+            {
+                this.bootstrapper.configuration.Serializers = new List<Type> { typeof(T) };
+                return this;
+            }
+
+            /// <summary>
+            /// Configures the bootstrapper to use specific serializers
+            /// </summary>
+            /// <param name="serializers">Sollection of serializer types</param>
+            /// <returns>A reference to the current <see cref="ConfigurableBoostrapperConfigurator"/>.</returns>
+            public ConfigurableBoostrapperConfigurator Serializers(params Type[] serializers)
+            {
+                this.bootstrapper.configuration.Serializers = new List<Type>(serializers);
                 return this;
             }
         }

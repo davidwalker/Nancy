@@ -1,5 +1,3 @@
-using Nancy.Security;
-
 namespace Nancy.Authentication.Forms.Tests
 {
     using System;
@@ -8,6 +6,7 @@ namespace Nancy.Authentication.Forms.Tests
     using Cryptography;
     using FakeItEasy;
     using Helpers;
+    using Nancy.Security;
     using Nancy.Tests;
     using Nancy.Tests.Fakes;
     using Xunit;
@@ -38,8 +37,8 @@ namespace Nancy.Authentication.Forms.Tests
         public FormsAuthenticationFixture()
         {
             this.cryptographyConfiguration = new CryptographyConfiguration(
-                new RijndaelEncryptionProvider(new PassphraseKeyGenerator("SuperSecretPass")),
-                new DefaultHmacProvider(new PassphraseKeyGenerator("UberSuperSecure")));
+                new RijndaelEncryptionProvider(new PassphraseKeyGenerator("SuperSecretPass", new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }, 1000)),
+                new DefaultHmacProvider(new PassphraseKeyGenerator("UberSuperSecure", new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }, 1000)));
 
             this.config = new FormsAuthenticationConfiguration()
             {
@@ -67,7 +66,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_throw_with_null_config_passed_to_enable()
         {
-            var result = Record.Exception(() => FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), null));
+            var result = Record.Exception(() => FormsAuthentication.Enable(A.Fake<IPipelines>(), null));
 
             result.ShouldBeOfType(typeof(ArgumentNullException));
         }
@@ -77,7 +76,7 @@ namespace Nancy.Authentication.Forms.Tests
         {
             var fakeConfig = A.Fake<FormsAuthenticationConfiguration>();
             A.CallTo(() => fakeConfig.IsValid).Returns(false);
-            var result = Record.Exception(() => FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), fakeConfig));
+            var result = Record.Exception(() => FormsAuthentication.Enable(A.Fake<IPipelines>(), fakeConfig));
 
             result.ShouldBeOfType(typeof(ArgumentException));
         }
@@ -85,7 +84,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_add_a_pre_and_post_hook_when_enabled()
         {
-            var pipelines = A.Fake<IApplicationPipelines>();
+            var pipelines = A.Fake<IPipelines>();
 
             FormsAuthentication.Enable(pipelines, this.config);
 
@@ -96,9 +95,9 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_return_redirect_response_when_user_logs_in()
+        public void Should_return_redirect_response_when_user_logs_in_with_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid);
 
@@ -107,9 +106,23 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_have_authentication_cookie_in_login_response()
+        public void Should_return_ok_response_when_user_logs_in_without_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.UserLoggedInResponse(userGuid);
+
+            // Then
+            result.ShouldBeOfType(typeof(Response));
+            result.StatusCode.ShouldEqual(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public void Should_have_authentication_cookie_in_login_response_when_logging_in_with_redirect()
+        {
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid);
 
@@ -117,9 +130,22 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_set_authentication_cookie_to_httponly()
+        public void Should_have_authentication_cookie_in_login_response_when_logging_in_without_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.UserLoggedInResponse(userGuid);
+
+            // Then
+            result.Cookies.Where(c => c.Name == FormsAuthentication.FormsAuthenticationCookieName).Any().ShouldBeTrue();
+        }
+
+        [Fact]
+        public void Should_set_authentication_cookie_to_httponly_when_logging_in_with_redirect()
+        {
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid);
 
@@ -128,9 +154,23 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_not_set_expiry_date_if_one_not_specified()
+        public void Should_set_authentication_cookie_to_httponly_when_logging_in_without_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.UserLoggedInResponse(userGuid);
+
+            // Then
+            result.Cookies.Where(c => c.Name == FormsAuthentication.FormsAuthenticationCookieName).First()
+                .HttpOnly.ShouldBeTrue();
+        }
+
+        [Fact]
+        public void Should_not_set_expiry_date_if_one_not_specified_when_logging_in_with_redirect()
+        {
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid);
 
@@ -139,9 +179,23 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_set_expiry_date_if_one_specified()
+        public void Should_not_set_expiry_date_if_one_not_specified_when_logging_in_without_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.UserLoggedInResponse(userGuid);
+
+            // Then
+            result.Cookies.Where(c => c.Name == FormsAuthentication.FormsAuthenticationCookieName).First()
+                .Expires.ShouldBeNull();
+        }
+
+        [Fact]
+        public void Should_set_expiry_date_if_one_specified_when_logging_in_with_redirect()
+        {
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid, DateTime.Now.AddDays(1));
 
@@ -150,11 +204,25 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_encrypt_cookie()
+        public void Should_set_expiry_date_if_one_specified_when_logging_in_without_redirect()
+        {
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.UserLoggedInResponse(userGuid, DateTime.Now.AddDays(1));
+
+            // Then
+            result.Cookies.Where(c => c.Name == FormsAuthentication.FormsAuthenticationCookieName).First()
+                .Expires.ShouldNotBeNull();
+        }
+
+        [Fact]
+        public void Should_encrypt_cookie_when_logging_in_with_redirect()
         {
             var mockEncrypter = A.Fake<IEncryptionProvider>();
             this.config.CryptographyConfiguration = new CryptographyConfiguration(mockEncrypter, this.cryptographyConfiguration.HmacProvider);
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid, DateTime.Now.AddDays(1));
 
@@ -163,7 +231,23 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_generate_hmac_for_cookie_from_encrypted_cookie()
+        public void Should_encrypt_cookie_when_logging_in_without_redirect()
+        {
+            // Given
+            var mockEncrypter = A.Fake<IEncryptionProvider>();
+            this.config.CryptographyConfiguration = new CryptographyConfiguration(mockEncrypter, this.cryptographyConfiguration.HmacProvider);
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            FormsAuthentication.UserLoggedInResponse(userGuid, DateTime.Now.AddDays(1));
+
+            // Then
+            A.CallTo(() => mockEncrypter.Encrypt(A<string>.Ignored))
+                .MustHaveHappened(Repeated.Exactly.Once);
+        }
+
+        [Fact]
+        public void Should_generate_hmac_for_cookie_from_encrypted_cookie_when_logging_in_with_redirect()
         {
             var fakeEncrypter = A.Fake<IEncryptionProvider>();
             var fakeCryptoText = "FakeText";
@@ -171,7 +255,7 @@ namespace Nancy.Authentication.Forms.Tests
                 .Returns(fakeCryptoText);
             var mockHmac = A.Fake<IHmacProvider>();
             this.config.CryptographyConfiguration = new CryptographyConfiguration(fakeEncrypter, mockHmac);
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             FormsAuthentication.UserLoggedInRedirectResponse(context, userGuid, DateTime.Now.AddDays(1));
 
@@ -180,9 +264,29 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_return_redirect_response_when_user_logs_out()
+        public void Should_generate_hmac_for_cookie_from_encrypted_cookie_when_logging_in_without_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            // Given
+            var fakeEncrypter = A.Fake<IEncryptionProvider>();
+            var fakeCryptoText = "FakeText";
+            A.CallTo(() => fakeEncrypter.Encrypt(A<string>.Ignored))
+                .Returns(fakeCryptoText);
+            var mockHmac = A.Fake<IHmacProvider>();
+            this.config.CryptographyConfiguration = new CryptographyConfiguration(fakeEncrypter, mockHmac);
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            FormsAuthentication.UserLoggedInResponse(userGuid, DateTime.Now.AddDays(1));
+
+            // Then
+            A.CallTo(() => mockHmac.GenerateHmac(fakeCryptoText))
+                .MustHaveHappened(Repeated.Exactly.Once);
+        }
+
+        [Fact]
+        public void Should_return_redirect_response_when_user_logs_out_with_redirect()
+        {
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.LogOutAndRedirectResponse(context, "/");
 
@@ -191,9 +295,23 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
-        public void Should_have_expired_empty_authentication_cookie_in_logout_response()
+        public void Should_return_ok_response_when_user_logs_out_without_redirect()
         {
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.LogOutResponse();
+
+            // Then
+            result.ShouldBeOfType(typeof(Response));
+            result.StatusCode.ShouldEqual(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public void Should_have_expired_empty_authentication_cookie_in_logout_response_when_user_logs_out_with_redirect()
+        {
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             var result = FormsAuthentication.LogOutAndRedirectResponse(context, "/");
 
@@ -204,9 +322,25 @@ namespace Nancy.Authentication.Forms.Tests
         }
 
         [Fact]
+        public void Should_have_expired_empty_authentication_cookie_in_logout_response_when_user_logs_out_without_redirect()
+        {
+            // Given
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
+
+            // When
+            var result = FormsAuthentication.LogOutResponse();
+
+            // Then
+            var cookie = result.Cookies.Where(c => c.Name == FormsAuthentication.FormsAuthenticationCookieName).First();
+            cookie.Value.ShouldBeEmpty();
+            cookie.Expires.ShouldNotBeNull();
+            (cookie.Expires < DateTime.Now).ShouldBeTrue();
+        }
+
+        [Fact]
         public void Should_get_username_from_mapping_service_with_valid_cookie()
         {
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             var mockMapper = A.Fake<IUserMapper>();
             this.config.UserMapper = mockMapper;
             FormsAuthentication.Enable(fakePipelines, this.config);
@@ -221,7 +355,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_set_user_in_context_with_valid_cookie()
         {
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             var fakeMapper = A.Fake<IUserMapper>();
             var fakeUser = A.Fake<IUserIdentity>();
             fakeUser.UserName = "Bob";
@@ -238,7 +372,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_not_set_user_in_context_with_invalid_hmac()
         {
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             var fakeMapper = A.Fake<IUserMapper>();
             var fakeUser = A.Fake<IUserIdentity>();
             fakeUser.UserName = "Bob";
@@ -255,7 +389,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_not_set_user_in_context_with_empty_hmac()
         {
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             var fakeMapper = A.Fake<IUserMapper>();
             var fakeUser = A.Fake<IUserIdentity>();
             fakeUser.UserName = "Bob";
@@ -272,7 +406,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_not_set_user_in_context_with_no_hmac()
         {
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             var fakeMapper = A.Fake<IUserMapper>();
             var fakeUser = A.Fake<IUserIdentity>();
             fakeUser.UserName = "Bob";
@@ -289,7 +423,7 @@ namespace Nancy.Authentication.Forms.Tests
         [Fact]
         public void Should_not_set_username_in_context_with_broken_encryption_data()
         {
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             var fakeMapper = A.Fake<IUserMapper>();
             var fakeUser = A.Fake<IUserIdentity>();
             fakeUser.UserName = "Bob";
@@ -307,7 +441,7 @@ namespace Nancy.Authentication.Forms.Tests
         public void Should_retain_querystring_when_redirecting_to_login_page()
         {
             // Given
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
             
             FormsAuthentication.Enable(fakePipelines, this.config);
 
@@ -333,26 +467,13 @@ namespace Nancy.Authentication.Forms.Tests
                 Request = new FakeRequest("GET", "/secure", "returnUrl=/secure%3Ffoo%3Dbar")
             };
 
-            FormsAuthentication.Enable(A.Fake<IApplicationPipelines>(), this.config);
+            FormsAuthentication.Enable(A.Fake<IPipelines>(), this.config);
 
             // When
             var result = FormsAuthentication.UserLoggedInRedirectResponse(queryContext, userGuid, DateTime.Now.AddDays(1));
 
             // Then
             result.Headers["Location"].ShouldEqual("/secure?foo=bar");
-        }
-
-        public class FakeApplicationPipelines : IApplicationPipelines
-        {
-            public BeforePipeline BeforeRequest { get; set; }
-
-            public AfterPipeline AfterRequest { get; set; }
-
-            public FakeApplicationPipelines()
-            {
-                this.BeforeRequest = new BeforePipeline();
-                this.AfterRequest = new AfterPipeline();
-            }
         }
     }
 }

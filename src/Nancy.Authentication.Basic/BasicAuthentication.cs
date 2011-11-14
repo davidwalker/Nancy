@@ -1,12 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿namespace Nancy.Authentication.Basic
+{
+    using System;
 using System.Text;
 using Nancy.Bootstrapper;
+    using Nancy.Extensions;
 using Nancy.Security;
 
-namespace Nancy.Authentication.Basic
-{
     /// <summary>
     /// Nancy basic authentication implementation
     /// </summary>
@@ -17,13 +16,13 @@ namespace Nancy.Authentication.Basic
         /// <summary>
         /// Enables basic authentication for the application
         /// </summary>
-        /// <param name="applicationPipelines">Pipelines to add handlers to (usually "this")</param>
+        /// <param name="pipelines">Pipelines to add handlers to (usually "this")</param>
         /// <param name="configuration">Forms authentication configuration</param>
-        public static void Enable(IApplicationPipelines applicationPipelines, BasicAuthenticationConfiguration configuration)
+        public static void Enable(IPipelines pipelines, BasicAuthenticationConfiguration configuration)
         {
-            if (applicationPipelines == null)
+            if (pipelines == null)
             {
-                throw new ArgumentNullException("applicationPipelines");
+                throw new ArgumentNullException("pipelines");
             }
 
             if (configuration == null)
@@ -31,8 +30,8 @@ namespace Nancy.Authentication.Basic
                 throw new ArgumentNullException("configuration");
             }
 
-            applicationPipelines.BeforeRequest.AddItemToStartOfPipeline(GetCredentialRetrievalHook(configuration));
-            applicationPipelines.AfterRequest.AddItemToEndOfPipeline(GetAuthenticationPromptHook(configuration));
+            pipelines.BeforeRequest.AddItemToStartOfPipeline(GetCredentialRetrievalHook(configuration));
+            pipelines.AfterRequest.AddItemToEndOfPipeline(GetAuthenticationPromptHook(configuration));
         }
 
         /// <summary>
@@ -81,7 +80,7 @@ namespace Nancy.Authentication.Basic
         {
             return context =>
                 {
-                    if (context.Response.StatusCode == HttpStatusCode.Unauthorized)
+                    if (context.Response.StatusCode == HttpStatusCode.Unauthorized && SendAuthenticateResponseHeader(context, configuration))
                     {
                         context.Response.Headers["WWW-Authenticate"] = String.Format("{0} realm=\"{1}\"", SCHEME, configuration.Realm);
                     }
@@ -90,7 +89,8 @@ namespace Nancy.Authentication.Basic
 
         private static void RetrieveCredentials(NancyContext context, BasicAuthenticationConfiguration configuration)
         {
-            var credentials = ExtractCredentialsFromHeaders(context.Request);
+            var credentials = 
+                ExtractCredentialsFromHeaders(context.Request);
 
             if (credentials != null && credentials.Length == 2)
             {
@@ -129,6 +129,11 @@ namespace Nancy.Authentication.Basic
             {
                 return null;
             }
+        }
+
+        private static bool SendAuthenticateResponseHeader(NancyContext context, BasicAuthenticationConfiguration configuration)
+        {
+            return configuration.UserPromptBehaviour == UserPromptBehaviour.Always || (configuration.UserPromptBehaviour == UserPromptBehaviour.NonAjax && !context.Request.IsAjaxRequest());
         }
     }
 }

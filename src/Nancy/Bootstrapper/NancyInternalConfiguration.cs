@@ -8,6 +8,8 @@ namespace Nancy.Bootstrapper
     using Nancy.ModelBinding;
     using Nancy.Routing;
     using Nancy.ViewEngines;
+    using Responses;
+    using Security;
 
     /// <summary>
     /// Configuration class for Nancy's internals.
@@ -35,7 +37,7 @@ namespace Nancy.Bootstrapper
                         ViewLocator = typeof(DefaultViewLocator),
                         ViewFactory = typeof(DefaultViewFactory),
                         NancyModuleBuilder = typeof(DefaultNancyModuleBuilder),
-                        ResponseFormatter = typeof(DefaultResponseFormatter),
+                        ResponseFormatterFactory = typeof(DefaultResponseFormatterFactory),
                         ModelBinderLocator = typeof(DefaultModelBinderLocator),
                         Binder = typeof(DefaultBinder),
                         BindingDefaults = typeof(BindingDefaults),
@@ -45,7 +47,10 @@ namespace Nancy.Bootstrapper
                         RenderContextFactory = typeof(DefaultRenderContextFactory),
                         ViewLocationCache = typeof(DefaultViewLocationCache),
                         ViewLocationProvider = typeof(FileSystemViewLocationProvider),
-                        ErrorHandler = typeof(DefaultErrorHandler),
+                        ErrorHandlers = new List<Type>(new[] { typeof(DefaultErrorHandler) }.Concat(AppDomainAssemblyTypeScanner.TypesOf<IErrorHandler>(true))),
+                        CsrfTokenValidator = typeof(DefaultCsrfTokenValidator),
+                        ObjectSerializer = typeof(DefaultObjectSerializer),
+                        Serializers = new List<Type>(new[] { typeof(DefaultJsonSerializer), typeof(DefaultXmlSerializer) }),
                     };
             }
         }
@@ -70,7 +75,7 @@ namespace Nancy.Bootstrapper
 
         public Type NancyModuleBuilder { get; set; }
 
-        public Type ResponseFormatter { get; set; }
+        public Type ResponseFormatterFactory { get; set; }
 
         public Type ModelBinderLocator { get; set; }
 
@@ -90,7 +95,13 @@ namespace Nancy.Bootstrapper
 
         public Type ViewLocationProvider { get; set; }
 
-        public Type ErrorHandler { get; set; }
+        public IList<Type> ErrorHandlers { get; set; }
+
+        public Type CsrfTokenValidator { get; set; }
+
+        public Type ObjectSerializer { get; set; }
+
+        public IList<Type> Serializers { get; set; } 
 
         /// <summary>
         /// Gets a value indicating whether the configuration is valid.
@@ -125,7 +136,7 @@ namespace Nancy.Bootstrapper
         }
 
         /// <summary>
-        /// Raturns the configuration types as a TypeRegistration collection
+        /// Returns the configuration types as a TypeRegistration collection
         /// </summary>
         /// <returns>TypeRegistration collection representing the configurationt types</returns>
         public IEnumerable<TypeRegistration> GetTypeRegistations()
@@ -142,7 +153,7 @@ namespace Nancy.Bootstrapper
                 new TypeRegistration(typeof(IViewFactory), this.ViewFactory),
                 new TypeRegistration(typeof(INancyContextFactory), this.ContextFactory),
                 new TypeRegistration(typeof(INancyModuleBuilder), this.NancyModuleBuilder),
-                new TypeRegistration(typeof(IResponseFormatter), this.ResponseFormatter),
+                new TypeRegistration(typeof(IResponseFormatterFactory), this.ResponseFormatterFactory),
                 new TypeRegistration(typeof(IModelBinderLocator), this.ModelBinderLocator), 
                 new TypeRegistration(typeof(IBinder), this.Binder), 
                 new TypeRegistration(typeof(BindingDefaults), this.BindingDefaults), 
@@ -152,7 +163,21 @@ namespace Nancy.Bootstrapper
                 new TypeRegistration(typeof(IRenderContextFactory), this.RenderContextFactory),
                 new TypeRegistration(typeof(IViewLocationCache), this.ViewLocationCache),
                 new TypeRegistration(typeof(IViewLocationProvider), this.ViewLocationProvider),
-                new TypeRegistration(typeof(IErrorHandler), this.ErrorHandler), 
+                new TypeRegistration(typeof(ICsrfTokenValidator), this.CsrfTokenValidator), 
+                new TypeRegistration(typeof(IObjectSerializer), this.ObjectSerializer), 
+            };
+        }
+
+        /// <summary>
+        /// Returns the collection configuration types as a CollectionTypeRegistration collection
+        /// </summary>
+        /// <returns>CollectionTypeRegistration collection representing the configuration types</returns>
+        public IEnumerable<CollectionTypeRegistration> GetCollectionTypeRegistrations()
+        {
+            return new[]
+            {
+                new CollectionTypeRegistration(typeof(ISerializer), this.Serializers), 
+                new CollectionTypeRegistration(typeof(IErrorHandler), this.ErrorHandlers), 
             };
         }
     }

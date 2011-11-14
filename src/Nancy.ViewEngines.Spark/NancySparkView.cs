@@ -19,12 +19,19 @@
 
         public string H(object value)
         {
-            return HttpUtility.HtmlEncode(value.ToString());
+            return HttpUtility.HtmlEncode(value);
         }
 
         public object HTML(object value)
         {
             return value;
+        }
+
+        public string AntiForgeryToken()
+        {
+            var tokenKeyValue = this.RenderContext.GetCsrfToken();
+
+            return string.Format("<input type=\"hidden\" name=\"{0}\" value=\"{1}\"/>", tokenKeyValue.Key, tokenKeyValue.Value);
         }
 
         public virtual void SetModel(object model)

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -101,7 +101,7 @@
     <Content Include="Content\main.css" />
     <Content Include="Content\scripts.js" />
     <Content Include="Views\javascript.html" />
-    <Content Include="Views\static.htm" />
+    <Content Include="Views\static.html" />
     <Content Include="Web.config">
       <SubType>Designer</SubType>
     </Content>
@@ -117,6 +117,7 @@
       <Link>Properties\SharedAssemblyInfo.cs</Link>
     </Compile>
     <Compile Include="ApplicationDependencyClass.cs" />
+    <Compile Include="CustomErrorHandler.cs" />
     <Compile Include="HereBeAResponseYouScurvyDog.cs" />
     <Compile Include="DemoBootstrapper.cs" />
     <Compile Include="DependencyModule.cs" />
@@ -163,6 +164,7 @@
     <Content Include="Views\someview.cshtml" />
     <Content Include="Views\razor-layout.cshtml" />
     <None Include="Views\anon.spark" />
+    <Content Include="Views\csrf.cshtml" />
     <None Include="Views\dot.liquid" />
     <None Include="Views\ndjango-base.django" />
     <Content Include="Views\razor-dependency.cshtml" />
@@ -176,6 +178,7 @@
   <ItemGroup />
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v10.0\WebApplications\Microsoft.WebApplication.targets" />
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v9.0\WebApplications\Microsoft.WebApplication.targets" />
   <ProjectExtensions>
     <VisualStudio>
       <FlavorProperties GUID="{349C5851-65DF-11DA-9384-00065B846F21}">
@@ -183,7 +186,7 @@
           <UseIIS>False</UseIIS>
           <AutoAssignPort>False</AutoAssignPort>
           <DevelopmentServerPort>40965</DevelopmentServerPort>
-          <DevelopmentServerVPath>/nancydemo</DevelopmentServerVPath>
+          <DevelopmentServerVPath>/</DevelopmentServerVPath>
           <IISUrl>http://localhost:59015/nancytest</IISUrl>
           <NTLMAuthentication>False</NTLMAuthentication>
           <UseCustomServer>False</UseCustomServer>

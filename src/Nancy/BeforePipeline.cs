@@ -1,7 +1,7 @@
 ﻿namespace Nancy
 {
     using System;
-    using System.Collections.Generic;
+    using System.Linq;
 
     /// <summary>
     /// <para>
@@ -15,30 +15,14 @@
     /// composite pipelines.
     /// </para>
     /// </summary>
-    public class BeforePipeline
+    public class BeforePipeline : NamedPipelineBase<Func<NancyContext, Response>> 
     {
-        /// <summary>
-        /// Pipeline items to execute
-        /// </summary>
-        protected List<Func<NancyContext, Response>> pipelineItems;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="BeforePipeline"/> class.
-        /// </summary>
         public BeforePipeline()
         {
-            this.pipelineItems = new List<Func<NancyContext, Response>>();
         }
 
-        /// <summary>
-        /// Gets the current pipeline items
-        /// </summary>
-        public IEnumerable<Func<NancyContext, Response>> PipelineItems
+        public BeforePipeline(int capacity) : base(capacity)
         {
-            get
-            {
-                return this.pipelineItems.AsReadOnly();
-            }
         }
 
         public static implicit operator Func<NancyContext, Response>(BeforePipeline pipeline)
@@ -61,7 +45,11 @@
 
         public static BeforePipeline operator +(BeforePipeline pipelineToAddTo, BeforePipeline pipelineToAdd)
         {
-            pipelineToAddTo.pipelineItems.AddRange(pipelineToAdd.pipelineItems);
+            foreach (var pipelineItem in pipelineToAdd.PipelineItems)
+            {
+                pipelineToAddTo.AddItemToEndOfPipeline(pipelineItem);
+            }
+
             return pipelineToAddTo;
         }
 
@@ -75,11 +63,11 @@
         /// <returns>
         /// Response from an item invocation, or null if no response was generated.
         /// </returns>
-        public virtual Response Invoke(NancyContext context)
+        public Response Invoke(NancyContext context)
         {
             Response returnValue = null;
 
-            using (var enumerator = this.PipelineItems.GetEnumerator())
+            using (var enumerator = this.PipelineDelegates.GetEnumerator())
             {
                 while (returnValue == null && enumerator.MoveNext())
                 {
@@ -89,33 +77,5 @@
 
             return returnValue;
         }
-
-        /// <summary>
-        /// Add an item to the start of the pipeline
-        /// </summary>
-        /// <param name="item">Item to add</param>
-        public virtual void AddItemToStartOfPipeline(Func<NancyContext, Response> item)
-        {
-            this.InsertItemAtPipelineIndex(0, item);
-        }
-
-        /// <summary>
-        /// Add an item to the end of the pipeline
-        /// </summary>
-        /// <param name="item">Item to add</param>
-        public virtual void AddItemToEndOfPipeline(Func<NancyContext, Response> item)
-        {
-            this.pipelineItems.Add(item);
-        }
-
-        /// <summary>
-        /// Add an item to a specific place in the pipeline.
-        /// </summary>
-        /// <param name="index">Index to add at</param>
-        /// <param name="item">Item to add</param>
-        public virtual void InsertItemAtPipelineIndex(int index, Func<NancyContext, Response> item)
-        {
-            this.pipelineItems.Insert(index, item);
-        }
     }
-}
+} 

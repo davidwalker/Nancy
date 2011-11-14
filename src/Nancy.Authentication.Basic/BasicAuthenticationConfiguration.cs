@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-
 namespace Nancy.Authentication.Basic
 {
 	/// <summary>
@@ -15,34 +13,58 @@ namespace Nancy.Authentication.Basic
         /// </summary>
 		/// <param name="userValidator">A valid instance of <see cref="IUserValidator"/> class</param>
 		/// <param name="realm">Basic authentication realm</param>
-		public BasicAuthenticationConfiguration(IUserValidator userValidator, string realm)
+        /// <param name="userPromptBehaviour">Control when the browser should be instructed to prompt for credentials</param>
+        public BasicAuthenticationConfiguration(IUserValidator userValidator, string realm, UserPromptBehaviour userPromptBehaviour = Basic.UserPromptBehaviour.NonAjax)
         {
 			if (userValidator == null)
+			{
 				throw new ArgumentNullException("userValidator");
+			}
 
 			if (string.IsNullOrEmpty(realm))
+			{
 				throw new ArgumentException("realm");
+			}
 
 			this.UserValidator = userValidator;
 			this.Realm = realm;
+            this.UserPromptBehaviour = userPromptBehaviour;
         }
 
 		/// <summary>
 		/// Gets the user validator
 		/// </summary>
-		public IUserValidator UserValidator
-		{
-			get;
-			private set;
-		}
+		public IUserValidator UserValidator { get; private set; }
 
 		/// <summary>
 		/// Gets the basic authentication realm
 		/// </summary>
-		public string Realm
-		{
-			get;
-			private set;
-		}
+		public string Realm { get; private set; }
+        
+        /// <summary>
+        /// Determines when the browser should prompt the user for credentials
+        /// </summary>
+        public UserPromptBehaviour UserPromptBehaviour { get; private set; }
+    }
+
+    /// <summary>
+    /// Options to control when the browser prompts the user for credentials
+    /// </summary>
+    public enum UserPromptBehaviour
+    {
+        /// <summary>
+        /// Never present user with login prompt
+        /// </summary>
+        Never,
+        
+        /// <summary>
+        /// Always present user with login prompt
+        /// </summary>
+        Always,
+
+        /// <summary>
+        /// Only prompt the user for credentials on non-ajax requests
+        /// </summary>
+        NonAjax
 	}
 }

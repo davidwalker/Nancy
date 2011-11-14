@@ -11,63 +11,68 @@
     using Nancy.Tests.Fakes;
 
     public class BasicAuthenticationFixture
-	{
-		private readonly BasicAuthenticationConfiguration config;
-	    private readonly IApplicationPipelines hooks;
+    {
+        private readonly BasicAuthenticationConfiguration config;
+        const string ajaxRequestHeaderKey = "X-Requested-With";
+        const string ajaxRequestHeaderValue = "XMLHttpRequest";
+        private readonly IPipelines hooks;
 
-	    public BasicAuthenticationFixture()
+        public BasicAuthenticationFixture()
         {
-			this.config = new BasicAuthenticationConfiguration(A.Fake<IUserValidator>(), "realm");
-		    this.hooks = new FakeApplicationPipelines();
+            this.config = new BasicAuthenticationConfiguration(A.Fake<IUserValidator>(), "realm", UserPromptBehaviour.Always);
+            this.hooks = new Pipelines();
             BasicAuthentication.Enable(this.hooks, this.config);
         }
 
-		[Fact]
-		public void Should_add_a_pre_and_post_hook_in_application_when_enabled()
-		{
+        [Fact]
+        public void Should_add_a_pre_and_post_hook_in_application_when_enabled()
+        {
             // Given
-			var pipelines = A.Fake<IApplicationPipelines>();
+            var pipelines = A.Fake<IPipelines>();
 
             // When
-			BasicAuthentication.Enable(pipelines, this.config);
+            BasicAuthentication.Enable(pipelines, this.config);
 
             // Then
-			A.CallTo(() => pipelines.BeforeRequest.AddItemToStartOfPipeline(A<Func<NancyContext, Response>>.Ignored))
-				.MustHaveHappened(Repeated.Exactly.Once);
-		}
+            A.CallTo(() => pipelines.BeforeRequest.AddItemToStartOfPipeline(A<Func<NancyContext, Response>>.Ignored))
+                .MustHaveHappened(Repeated.Exactly.Once);
+            A.CallTo(() => pipelines.AfterRequest.AddItemToEndOfPipeline(A<Action<NancyContext>>.Ignored))
+                .MustHaveHappened(Repeated.Exactly.Once);
+        }
 
-		[Fact]
-		public void Should_add_both_basic_and_requires_auth_pre_and_post_hooks_in_module_when_enabled()
-		{
+        [Fact]
+        public void Should_add_both_basic_and_requires_auth_pre_and_post_hooks_in_module_when_enabled()
+        {
             // Given
-			var module = new FakeModule();
+            var module = new FakeModule();
 
             // When
-			BasicAuthentication.Enable(module, this.config);
-			
+            BasicAuthentication.Enable(module, this.config);
+            
             // Then
-			module.Before.PipelineItems.ShouldHaveCount(2);
-		}
+            module.Before.PipelineDelegates.ShouldHaveCount(2);
+            module.After.PipelineDelegates.ShouldHaveCount(1);
+        }
 
-		[Fact]
-		public void Should_throw_with_null_config_passed_to_enable_with_application()
-		{
+        [Fact]
+        public void Should_throw_with_null_config_passed_to_enable_with_application()
+        {
             // Given, When
-			var result = Record.Exception(() => BasicAuthentication.Enable(A.Fake<IApplicationPipelines>(), null));
+            var result = Record.Exception(() => BasicAuthentication.Enable(A.Fake<IPipelines>(), null));
 
             // Then
-			result.ShouldBeOfType(typeof(ArgumentNullException));
-		}
+            result.ShouldBeOfType(typeof(ArgumentNullException));
+        }
 
-		[Fact]
-		public void Should_throw_with_null_config_passed_to_enable_with_module()
-		{
+        [Fact]
+        public void Should_throw_with_null_config_passed_to_enable_with_module()
+        {
             // Given, When
-			var result = Record.Exception(() => BasicAuthentication.Enable(new FakeModule(), null));
+            var result = Record.Exception(() => BasicAuthentication.Enable(new FakeModule(), null));
 
             // Then
-			result.ShouldBeOfType(typeof(ArgumentNullException));
-		}
+            result.ShouldBeOfType(typeof(ArgumentNullException));
+        }
 
         [Fact]
         public void Pre_request_hook_should_not_set_auth_details_with_no_auth_headers()
@@ -108,6 +113,75 @@
             context.Response.Headers["WWW-Authenticate"].ShouldContain("Basic");
             context.Response.Headers["WWW-Authenticate"].ShouldContain("realm=\"" + this.config.Realm + "\"");
         }
+
+        [Fact]
+        public void Post_request_hook_should_not_return_a_challenge_when_set_to_never()
+        {
+            // Given
+            var config = new BasicAuthenticationConfiguration(A.Fake<IUserValidator>(), "realm", UserPromptBehaviour.Never);
+            var hooks = new Pipelines();
+            BasicAuthentication.Enable(hooks, config);
+
+            var context = new NancyContext()
+            {
+                Request = new FakeRequest("GET", "/")
+            };
+
+            context.Response = new Response { StatusCode = HttpStatusCode.Unauthorized };
+
+            // When
+            hooks.AfterRequest.Invoke(context);
+
+            // Then
+            context.Response.Headers.ContainsKey("WWW-Authenticate").ShouldBeFalse();
+        }
+
+        [Fact]
+        public void Post_request_hook_should_not_return_a_challenge_on_an_ajax_request_when_set_to_nonajax()
+        {
+            // Given
+            var config = new BasicAuthenticationConfiguration(A.Fake<IUserValidator>(), "realm", UserPromptBehaviour.NonAjax);
+            var hooks = new Pipelines();
+            BasicAuthentication.Enable(hooks, config);
+            var headers = new Dictionary<string,IEnumerable<string>>();
+            headers.Add(ajaxRequestHeaderKey, new [] { ajaxRequestHeaderValue });
+
+            var context = new NancyContext()
+            {
+                Request = new FakeRequest("GET", "/", headers)
+            };
+
+            context.Response = new Response { StatusCode = HttpStatusCode.Unauthorized };
+
+            // When
+            hooks.AfterRequest.Invoke(context);
+
+            // Then
+            context.Response.Headers.ContainsKey("WWW-Authenticate").ShouldBeFalse();
+        }
+
+        [Fact]
+        public void Post_request_hook_should_return_a_challenge_on_a_nonajax_request_when_set_to_nonajax()
+        {
+            // Given
+            var config = new BasicAuthenticationConfiguration(A.Fake<IUserValidator>(), "realm", UserPromptBehaviour.NonAjax);
+            var hooks = new Pipelines();
+            BasicAuthentication.Enable(hooks, config);
+
+            var context = new NancyContext()
+            {
+                Request = new FakeRequest("GET", "/")
+            };
+
+            context.Response = new Response { StatusCode = HttpStatusCode.Unauthorized };
+
+            // When
+            hooks.AfterRequest.Invoke(context);
+
+            // Then
+            context.Response.Headers.ContainsKey("WWW-Authenticate").ShouldBeTrue();
+        }
+
 
         [Fact]
         public void Pre_request_hook_should_not_set_auth_details_when_invalid_scheme_in_auth_header()
@@ -157,7 +231,7 @@
         public void Should_set_user_in_context_with_valid_username_in_auth_header()
         {
             // Given
-            var fakePipelines = new FakeApplicationPipelines();
+            var fakePipelines = new Pipelines();
 
             var validator = A.Fake<IUserValidator>();
             var fakeUser = A.Fake<IUserIdentity>();
@@ -191,29 +265,16 @@
         }
 
         private static string EncodeCredentials(string username, string password)
-		{
-			var credentials = string.Format("{0}:{1}", username, password);
+        {
+            var credentials = string.Format("{0}:{1}", username, password);
 
-			var encodedCredentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(credentials));
+            var encodedCredentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(credentials));
 
-			return encodedCredentials;
-		}
+            return encodedCredentials;
+        }
 
-		class FakeModule : NancyModule
-		{
-		}
-
-		public class FakeApplicationPipelines : IApplicationPipelines
-		{
-			public BeforePipeline BeforeRequest { get; set; }
-
-			public AfterPipeline AfterRequest { get; set; }
-
-			public FakeApplicationPipelines()
-			{
-				this.BeforeRequest = new BeforePipeline();
-				this.AfterRequest = new AfterPipeline();
-			}
-		}
-	}
+        class FakeModule : NancyModule
+        {
+        }
+    }
 }

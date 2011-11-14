@@ -2,35 +2,31 @@
 {
     using System;
     using System.IO;
-    using Nancy.Json;
+    using Json;
 
     public class JsonResponse<TModel> : Response
     {
-        public JsonResponse(TModel model)
+        public JsonResponse(TModel model, ISerializer serializer)
         {
-            this.Contents = GetJsonContents(model);
+            if (serializer == null)
+            {
+                throw new InvalidOperationException("JSON Serializer not set");
+            }
+
+            this.Contents = GetJsonContents(model, serializer);
             this.ContentType = "application/json";
             this.StatusCode = HttpStatusCode.OK;
         }
      
-        private static Action<Stream> GetJsonContents(TModel model)
+        private static Action<Stream> GetJsonContents(TModel model, ISerializer serializer)
         {
-            return stream =>
-            {
-                var serializer = new JavaScriptSerializer(null, false, JsonSettings.MaxJsonLength, JsonSettings.MaxRecursions);
-                var json = serializer.Serialize(model);
-
-                var writer = new StreamWriter(stream);
-
-                writer.Write(json);
-                writer.Flush();
-            };
+            return stream => serializer.Serialize("application/json", model, stream);
         }
     }
 
     public class JsonResponse : JsonResponse<object>
     {
-        public JsonResponse(object model) : base(model)
+        public JsonResponse(object model, ISerializer serializer) : base(model, serializer)
         {
         }
     }

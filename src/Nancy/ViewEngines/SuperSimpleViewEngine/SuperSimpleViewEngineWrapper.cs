@@ -4,6 +4,7 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Threading;
+    using Responses;
 
     /// <summary>
     /// Nancy IViewEngine wrapper for the super simple view engine
@@ -15,7 +16,10 @@
         /// </summary>
         private readonly string[] extensions = new[] { "sshtml", "html", "htm" };
 
-        private SuperSimpleViewEngine viewEngine;
+        /// <summary>
+        /// The engine itself
+        /// </summary>
+        private readonly SuperSimpleViewEngine viewEngine = new SuperSimpleViewEngine();
 
         /// <summary>
         /// Gets the extensions file extensions that are supported by the view engine.
@@ -36,19 +40,17 @@
         /// </summary>
         /// <param name="viewLocationResult">A <see cref="ViewLocationResult"/> instance, containing information on how to get the view template.</param>
         /// <param name="model">The model that should be passed into the view</param>
-        /// <returns>A delegate that can be invoked with the <see cref="Stream"/> that the view should be rendered to.</returns>
-        public Action<Stream> RenderView(ViewLocationResult viewLocationResult, dynamic model, IRenderContext renderContext)
+        /// <returns>A response.</returns>
+        public Response RenderView(ViewLocationResult viewLocationResult, dynamic model, IRenderContext renderContext)
         {
-            Interlocked.CompareExchange(ref this.viewEngine, new SuperSimpleViewEngine(new NancyViewEngineHost(renderContext)), null);
+            return new HtmlResponse(contents: s =>
+                {
+                    var writer = new StreamWriter(s);
+                    var templateContents = renderContext.ViewCache.GetOrAdd(viewLocationResult, vr => vr.Contents.Invoke().ReadToEnd());
 
-            return s =>
-            {
-                var writer = new StreamWriter(s);
-                var templateContents = renderContext.ViewCache.GetOrAdd(viewLocationResult, vr => vr.Contents.Invoke().ReadToEnd());
-
-                writer.Write(this.viewEngine.Render(templateContents, model));
-                writer.Flush();
-            };
+                    writer.Write(this.viewEngine.Render(templateContents, model, new NancyViewEngineHost(renderContext)));
+                    writer.Flush();
+                });
         }
     }
 }

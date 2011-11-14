@@ -3,26 +3,14 @@ namespace Nancy.Demo.Hosting.Aspnet
     using System;
     using Nancy.Demo.Hosting.Aspnet.Models;
     using Nancy.Routing;
+    using Security;
 
     public class MainModule : NancyModule
     {
         public MainModule(IRouteCacheProvider routeCacheProvider)
         {
-            Get["/"] = x => {
+            Get["/"] = x =>{
                 return View["routes.cshtml", routeCacheProvider.GetCache()];
-            };
-
-            Get["/style/{file}"] = x => {
-                return Response.AsCss("Content/" + (string)x.file);
-            };
-
-            Get["/scripts/{file}"] = x => {
-                return Response.AsJs("Content/" + (string)x.file);
-            };
-
-            Get["/images/{file}"] = x =>
-            {
-                return Response.AsImage("Content/" + (string)x.file);
             };
 
             Get["/filtered", r => true] = x => {
@@ -50,7 +38,7 @@ namespace Nancy.Demo.Hosting.Aspnet
             };
 
             Get["/static"] = x => {
-                return View["static.htm"];
+                return View["static"];
             };
 
             Get["/razor"] = x => {
@@ -139,6 +127,32 @@ namespace Nancy.Demo.Hosting.Aspnet
             Get["/error"] = x =>
                 {
                     throw new NotSupportedException("This is an exception thrown in a route.");
+                };
+
+            Get["/customErrorHandler"] = _ => HttpStatusCode.ImATeapot;
+
+            Get["/csrf"] = x => this.View["csrf", new { Blurb = "CSRF without an expiry using the 'session' token" }];
+
+            Post["/csrf"] = x =>
+            {
+                this.ValidateCsrfToken();
+
+                return string.Format("Hello {0}!", Request.Form.Name);
+            };
+
+            Get["/csrfWithExpiry"] = x =>
+                {
+                    // Create a new one because we have an expiry to check
+                    this.CreateNewCsrfToken();
+
+                    return this.View["csrf", new { Blurb = "You have 20 seconds to submit the page.. TICK TOCK :-)" }];
+                };
+
+            Post["/csrfWithExpiry"] = x =>
+                {
+                    this.ValidateCsrfToken(TimeSpan.FromSeconds(20));
+
+                    return string.Format("Hello {0}!", Request.Form.Name);
                 };
         }
     }

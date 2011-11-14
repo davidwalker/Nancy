@@ -24,8 +24,6 @@
         private readonly IList<Uri> baseUriList;
         private readonly HttpListener listener;
         private readonly INancyEngine engine;
-        private Thread thread;
-        private bool shouldContinue;
 
         public NancyHost(params Uri[] baseUris)
             : this(NancyBootstrapperLocator.Bootstrapper, baseUris){}
@@ -49,8 +47,6 @@
 
         public void Start()
         {
-            shouldContinue = true;
-
             listener.Start();
             try
             {
@@ -90,7 +86,6 @@
 
         public void Stop()
         {
-            shouldContinue = false;
             listener.Stop();
         }
 
@@ -132,7 +127,8 @@
                 request.HttpMethod,
                 nancyUrl,
                 RequestStream.FromStream(request.InputStream, expectedRequestLength, true),
-                request.Headers.ToDictionary());
+                request.Headers.ToDictionary(), 
+                (request.RemoteEndPoint != null) ? request.RemoteEndPoint.Address.ToString() : null);
         }
 
         private static long GetExpectedRequestLength(IDictionary<string, IEnumerable<string>> incomingHeaders)
